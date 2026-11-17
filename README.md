@@ -1,5 +1,7 @@
 # axum-vite-spa-bundle
 
+[![crates.io](https://img.shields.io/crates/v/axum-vite-spa-bundle.svg)](https://crates.io/crates/axum-vite-spa-bundle)
+
 Serve a Vite single-page app from an [axum](https://crates.io/crates/axum)
 server:
 
