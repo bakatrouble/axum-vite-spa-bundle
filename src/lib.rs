@@ -1,15 +1,4 @@
-//! Generic single-page-app bundle serving.
-//!
-//! Release builds serve an embedded `dist` bundle through [`axum_embed`]:
-//! exact matches, `dir/` → `dir/index.html`, and unknown non-API paths fall
-//! back to `index.html` with 200 (standard SPA behavior). Debug builds
-//! forward to the locally running Vite dev server (HTTP + HMR websockets)
-//! through [`axum_reverse_proxy`].
-//!
-//! Mount with [`Router::fallback`] semantics: merge the returned router LAST,
-//! after the API routers, so existing API routes keep priority. Any request
-//! whose path is under any of the [`SpaConfig::api_prefixes`] gets a local
-//! 404 in both modes — never `index.html`, never the proxy.
+#![doc = include_str!("../README.md")]
 
 use std::sync::Arc;
 

@@ -1,6 +1,6 @@
 [package]
 name = "axum-vite-spa-bundle"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 description = "Serve a Vite SPA from an axum app: embedded bundle in release, reverse proxy to the Vite dev server in debug"
 exclude = ["examples/vite-app/node_modules/", "examples/vite-app/dist/", "examples/vite-app/bun.lock", "target/"]

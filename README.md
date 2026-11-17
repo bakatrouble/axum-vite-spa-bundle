@@ -14,7 +14,7 @@ server:
 
 ## Usage
 
-```rust
+```rust,ignore
 use axum::Router;
 use axum_vite_spa_bundle::{SpaConfig, spa_router};
 
@@ -62,7 +62,7 @@ Early release. The API may change before 1.0.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT. See the LICENSE file in the repository.
 
 ## Example
 
