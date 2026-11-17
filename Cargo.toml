@@ -1,0 +1,28 @@
+[package]
+name = "axum-vite-spa-bundle"
+version = "1.0.0"
+edition = "2024"
+description = "Serve a Vite SPA from an axum app: embedded bundle in release, reverse proxy to the Vite dev server in debug"
+exclude = ["examples/vite-app/node_modules/", "examples/vite-app/dist/", "examples/vite-app/bun.lock", "target/"]
+license = "MIT"
+readme = "README.md"
+keywords = ["axum", "vite", "spa", "embed", "reverse-proxy"]
+categories = ["web-programming::http-server", "development-tools"]
+repository = "https://github.com/bakatrouble/axum-vite-spa-bundle"
+
+[dependencies]
+axum = "0.8.9"
+axum-embed = "0.1.0"
+axum-reverse-proxy = "2.4.0"
+rust-embed = "8.14.0"
+rustls = { version = "0.23.46", features = ["ring"] }
+tower = { version = "0.5.3", features = ["util"] }
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["full"] }
+
+[lints.cargo]
+# Profile-split dependencies: axum-embed serves the release bundle, while
+# axum-reverse-proxy and rustls serve the debug proxy. The profile that does
+# not use one would flag it as an unused dependency.
+unused_dependencies = "allow"
