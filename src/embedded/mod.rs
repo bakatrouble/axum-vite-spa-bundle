@@ -16,8 +16,15 @@ const INDEX: &str = "index.html";
 /// SHA-256 in hex), and `Last-Modified` when the bundle records one; a
 /// matching `If-None-Match` gets `304`. The root and a trailing-slash path
 /// map to `index.html`. Any other unknown path gets `index.html` with `200`
-/// (SPA fallback). Other methods get `405`. The bundle's precompressed
-/// variants (`.br`, `.gz`, `.zz`) are not negotiated.
+/// (SPA fallback). Other methods get `405`.
+///
+/// When the request's `Accept-Encoding` lists `gzip` and the bundle carries
+/// a `<path>.gz` sibling of the resolved file, that sibling is served
+/// instead with `Content-Encoding: gzip`; its own hash is the ETag, so a
+/// client that later loses gzip support (or sends `Accept-Encoding`
+/// unconditionally correctly) still revalidates correctly rather than
+/// matching the uncompressed file's ETag. `.br`/`.zz` siblings are not
+/// negotiated.
 ///
 /// Compiled in debug builds too, so it is tested with the same code the
 /// release router uses.
@@ -47,15 +54,19 @@ pub(crate) fn serve_embedded<E: rust_embed::RustEmbed>(req: &Request) -> Respons
         },
     };
 
-    let digest = file.metadata.sha256_hash();
-    let etag = hex(&digest);
+    let gzip = accepts_gzip(req)
+        .then(|| E::get(&format!("{name}.gz")))
+        .flatten();
+    let etag = hex(&gzip.as_ref().unwrap_or(&file).metadata.sha256_hash());
     if !is_fallback && if_none_match(req) == Some(etag.as_str()) {
         let mut res = Response::new(Body::empty());
         *res.status_mut() = StatusCode::NOT_MODIFIED;
         return res;
     }
 
-    let mut res = Response::new(Body::from(file.data.into_owned()));
+    let is_gzip = gzip.is_some();
+    let data = gzip.map_or(file.data, |gz| gz.data);
+    let mut res = Response::new(Body::from(data.into_owned()));
     *res.status_mut() = StatusCode::OK;
     let headers = res.headers_mut();
     let content_type = mime_guess::from_path(&name)
@@ -63,6 +74,9 @@ pub(crate) fn serve_embedded<E: rust_embed::RustEmbed>(req: &Request) -> Respons
         .to_string();
     insert_header(headers, header::CONTENT_TYPE, &content_type);
     insert_header(headers, header::ETAG, &etag);
+    if is_gzip {
+        insert_header(headers, header::CONTENT_ENCODING, "gzip");
+    }
     if let Some(modified) = file.metadata.last_modified() {
         let when = UNIX_EPOCH + Duration::from_secs(modified);
         insert_header(
@@ -72,6 +86,17 @@ pub(crate) fn serve_embedded<E: rust_embed::RustEmbed>(req: &Request) -> Respons
         );
     }
     res
+}
+
+/// Whether the request's `Accept-Encoding` lists `gzip` as one of its
+/// comma-separated encodings (`q` weights are not parsed: a non-zero
+/// preference for `gzip` is assumed whenever it is named at all, the common
+/// case for every real browser and `curl --compressed`).
+fn accepts_gzip(req: &Request) -> bool {
+    req.headers()
+        .get(header::ACCEPT_ENCODING)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.split(',').any(|encoding| encoding.trim() == "gzip"))
 }
 
 /// The `If-None-Match` value without quotes, when the header is present.

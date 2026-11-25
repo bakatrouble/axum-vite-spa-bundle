@@ -16,6 +16,22 @@ fn request(method: Method, path: &str, if_none_match: Option<&str>) -> Request {
     builder.body(Body::empty()).expect("test request builds")
 }
 
+fn request_with_encoding(
+    method: Method,
+    path: &str,
+    accept_encoding: Option<&str>,
+    if_none_match: Option<&str>,
+) -> Request {
+    let mut builder = axum::http::Request::builder().method(method).uri(path);
+    if let Some(value) = accept_encoding {
+        builder = builder.header(header::ACCEPT_ENCODING, value);
+    }
+    if let Some(value) = if_none_match {
+        builder = builder.header(header::IF_NONE_MATCH, value);
+    }
+    builder.body(Body::empty()).expect("test request builds")
+}
+
 async fn body_of(res: Response) -> Vec<u8> {
     to_bytes(res.into_body(), usize::MAX)
         .await
@@ -130,4 +146,90 @@ async fn other_methods_get_405() {
     let res = serve_embedded::<Dist>(&request(Method::POST, "/", None));
     assert_eq!(res.status(), StatusCode::METHOD_NOT_ALLOWED);
     assert_eq!(header_of(&res, header::CONTENT_TYPE), Some("text/plain"));
+}
+
+#[tokio::test]
+async fn gzip_accepted_serves_the_sibling_with_content_encoding() {
+    let name = first_asset(".js");
+    let res = serve_embedded::<Dist>(&request_with_encoding(
+        Method::GET,
+        &format!("/{name}"),
+        Some("gzip, deflate, br"),
+        None,
+    ));
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(header_of(&res, header::CONTENT_ENCODING), Some("gzip"));
+    assert!(
+        header_of(&res, header::CONTENT_TYPE).is_some_and(|value| value.contains("javascript")),
+        "content type {:?}",
+        header_of(&res, header::CONTENT_TYPE)
+    );
+    let expected = Dist::get(&format!("{name}.gz"))
+        .expect("the fixture has a .gz sibling")
+        .data
+        .into_owned();
+    assert_eq!(body_of(res).await, expected);
+}
+
+#[tokio::test]
+async fn gzip_not_accepted_serves_the_plain_file() {
+    let name = first_asset(".js");
+    let res = serve_embedded::<Dist>(&request(Method::GET, &format!("/{name}"), None));
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(header_of(&res, header::CONTENT_ENCODING), None);
+    let expected = Dist::get(&name).expect("asset exists").data.into_owned();
+    assert_eq!(body_of(res).await, expected);
+}
+
+#[tokio::test]
+async fn gzip_and_plain_variants_have_different_etags() {
+    let name = first_asset(".css");
+    let plain = serve_embedded::<Dist>(&request(Method::GET, &format!("/{name}"), None));
+    let gzip = serve_embedded::<Dist>(&request_with_encoding(
+        Method::GET,
+        &format!("/{name}"),
+        Some("gzip"),
+        None,
+    ));
+    let plain_etag = header_of(&plain, header::ETAG).expect("plain etag");
+    let gzip_etag = header_of(&gzip, header::ETAG).expect("gzip etag");
+    assert_ne!(plain_etag, gzip_etag);
+}
+
+#[tokio::test]
+async fn matching_if_none_match_gets_304_for_the_gzip_variant() {
+    let name = first_asset(".css");
+    let first = serve_embedded::<Dist>(&request_with_encoding(
+        Method::GET,
+        &format!("/{name}"),
+        Some("gzip"),
+        None,
+    ));
+    let etag = header_of(&first, header::ETAG)
+        .expect("etag set")
+        .to_owned();
+    let res = serve_embedded::<Dist>(&request_with_encoding(
+        Method::GET,
+        &format!("/{name}"),
+        Some("gzip"),
+        Some(&format!("\"{etag}\"")),
+    ));
+    assert_eq!(res.status(), StatusCode::NOT_MODIFIED);
+}
+
+#[tokio::test]
+async fn the_fallback_document_is_also_gzip_negotiated() {
+    let res = serve_embedded::<Dist>(&request_with_encoding(
+        Method::GET,
+        "/some/client/route",
+        Some("gzip"),
+        None,
+    ));
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(header_of(&res, header::CONTENT_ENCODING), Some("gzip"));
+    let expected = Dist::get(&format!("{INDEX}.gz"))
+        .expect("the fixture has an index.html.gz sibling")
+        .data
+        .into_owned();
+    assert_eq!(body_of(res).await, expected);
 }

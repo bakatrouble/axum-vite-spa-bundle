@@ -48,6 +48,16 @@ priority.
 `dev_base` trims a trailing `/` from the env value, so path joins never
 double a slash.
 
+## Precompressed assets
+
+In release builds, a `<path>.gz` sibling next to any served file (`index.html`
+included) is served instead when the request's `Accept-Encoding` lists
+`gzip`, with its own `Content-Encoding: gzip` and ETag. This crate does not
+compress anything itself: write the `.gz` files into the embedded folder at
+build time (a `vite build` plugin, a `build.rs` step, or any other script),
+before `rust-embed` reads the folder. `.br`/`.zz` siblings are not
+negotiated.
+
 ## Requirements
 
 - `rust-embed` must point at a folder that exists at compile time in
